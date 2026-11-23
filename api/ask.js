@@ -1,24 +1,32 @@
 // Vercel serverless function: POST /api/ask { system, prompt } -> { text }
-// Set ANTHROPIC_API_KEY in Vercel > Project > Settings > Environment Variables.
+// Uses Google Gemini (free tier, no credit card).
+// Get a key at https://aistudio.google.com/apikey and add it in
+// Vercel > Settings > Environment Variables as GEMINI_API_KEY.
 // Without a key it returns mock answers.
-import Anthropic from "@anthropic-ai/sdk";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   const { system = "", prompt = "", who = "?" } = req.body || {};
+  const key = process.env.GEMINI_API_KEY;
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.json({ text: `(mock ${who}) I would answer here. Add ANTHROPIC_API_KEY in Vercel to get real agents.`, mock: true });
+  if (!key) {
+    return res.json({ text: `(mock ${who}) I would answer here. Add GEMINI_API_KEY in Vercel to get real agents.`, mock: true });
   }
+
+  const model = process.env.MODEL || "gemini-flash-latest";
   try {
-    const client = new Anthropic();
-    const r = await client.messages.create({
-      model: process.env.MODEL || "claude-sonnet-4-5",
-      max_tokens: 400,
-      system: String(system).slice(0, 2000),
-      messages: [{ role: "user", content: String(prompt).slice(0, 12000) }],
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: String(system).slice(0, 2000) }] },
+        contents: [{ role: "user", parts: [{ text: String(prompt).slice(0, 12000) }] }],
+      }),
     });
-    res.json({ text: r.content[0].text });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.error?.message || "Gemini error" });
+    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "(no answer)";
+    res.json({ text });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

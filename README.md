@@ -12,7 +12,7 @@ Prototype for the Roboest challenge at Hack The Future Antwerp: a group of AI ag
 Same AI model, different system prompts and different information, with the code acting as the messenger between them.
 
 ## Web version (Vercel)
-`index.html` + `api/ask.js`. Add `ANTHROPIC_API_KEY` under Vercel > Settings > Environment Variables, then redeploy. Without a key it shows mock answers.
+`index.html` + `api/ask.js`. Add a free `GEMINI_API_KEY` (from aistudio.google.com/apikey) under Vercel > Settings > Environment Variables, then redeploy. Without a key it shows mock answers.
 
 ## Run it in the terminal
 ```bash
