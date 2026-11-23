@@ -14,15 +14,19 @@ export default async function handler(req, res) {
   }
 
   const model = process.env.MODEL || "gemini-flash-latest";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: String(system).slice(0, 2000) }] },
+    contents: [{ role: "user", parts: [{ text: String(prompt).slice(0, 12000) }] }],
+  });
+  const call = (auth) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...auth }, body });
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: String(system).slice(0, 2000) }] },
-        contents: [{ role: "user", parts: [{ text: String(prompt).slice(0, 12000) }] }],
-      }),
-    });
+    // Try the key as an API key; if Google rejects it, retry it as a Bearer token.
+    let r = await call({ "x-goog-api-key": key });
+    if (r.status === 400 || r.status === 401 || r.status === 403) {
+      const r2 = await call({ Authorization: `Bearer ${key}` });
+      if (r2.ok) r = r2;
+    }
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data.error?.message || "Gemini error" });
     const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "(no answer)";
