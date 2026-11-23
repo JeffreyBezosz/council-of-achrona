@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Council of Achrona</title>
+<style>
+  :root { --bg:#0b1020; --panel:#141b33; --gold:#e8a23c; --text:#e8ecf8; --muted:#8a93b5; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Georgia, serif; background: radial-gradient(circle at top, #1b2a6b, var(--bg) 60%); color:var(--text); min-height:100vh; }
+  header { text-align:center; padding:32px 16px 8px; }
+  h1 { margin:0; font-size:2.4rem; letter-spacing:1px; }
+  header p { color:var(--muted); max-width:640px; margin:8px auto; }
+  .table { display:flex; justify-content:center; gap:28px; flex-wrap:wrap; padding:20px; }
+  .seat { text-align:center; width:120px; transition:transform .2s; }
+  .avatar { width:80px; height:80px; border-radius:50%; margin:0 auto 6px; display:grid; place-items:center; font-size:38px; border:3px solid transparent; background:var(--panel); }
+  .seat.speaking { transform:scale(1.12); }
+  .seat.speaking .avatar { border-color:var(--gold); box-shadow:0 0 24px var(--gold); }
+  .seat small { color:var(--muted); display:block; font-size:.75rem; }
+  .controls { text-align:center; }
+  button { font:inherit; font-size:1.1rem; background:var(--gold); color:#1a1200; border:0; padding:12px 28px; border-radius:999px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  main { max-width:760px; margin:20px auto 60px; padding:0 16px; }
+  .round { color:var(--gold); text-transform:uppercase; letter-spacing:2px; font-size:.85rem; margin:28px 0 8px; border-bottom:1px solid #2a3560; padding-bottom:4px; }
+  .msg { display:flex; gap:12px; margin:10px 0; animation:in .3s ease; }
+  .msg .face { font-size:28px; flex:none; }
+  .bubble { background:var(--panel); padding:10px 14px; border-radius:12px; line-height:1.45; white-space:pre-wrap; border-left:3px solid var(--c); }
+  .bubble b { color:var(--c); }
+  @keyframes in { from { opacity:0; transform:translateY(6px);} }
+</style>
+</head>
+<body>
+<header>
+  <h1>The Council of Achrona</h1>
+  <p>The Desync shattered Achrona. Each council member holds a different piece of the truth. Only together can they find the cause and restore the realm.</p>
+</header>
+
+<div class="table" id="table"></div>
+<div class="controls"><button id="start">Convene the Council</button></div>
+<main id="log"></main>
+
+<script>
+// ---- AGENTS: personality + secret clues ----
+const AGENTS = [
+  { name:"Archivist", face:"📜", color:"#7fb2ff",
+    system:"You are the Archivist of Achrona: precise, data-driven, cares about preserving memory.",
+    clues:["Log 0417: memory archive checksums began failing at 03:12.","The backup crystal in the north vault was last verified 40 days ago."] },
+  { name:"Engineer", face:"⚙️", color:"#ffb36b",
+    system:"You are the Engineer of Achrona: pragmatic, focuses on systems, root causes and fast fixes.",
+    clues:["Power grid spike of 300% recorded at 03:10 in sector 7.","Sync daemon 'Chronos' auto-updated at 03:09 without approval."] },
+  { name:"Oracle", face:"🔮", color:"#c792ff",
+    system:"You are the Oracle of Achrona: cautious, thinks about long-term risk and hidden causes.",
+    clues:["Citizens report dreams from 'tomorrow', a sign of time desync.","Ancient texts warn: 'Never restore before the clock is stilled.'"] },
+];
+const CHAIR = { name:"Chair", face:"👑", color:"#e8a23c",
+  system:"You are the Chair of the Council. Neutral, decisive. You summarize debates into action." };
+const OPTIONS = ["A) Restore memories from backup crystal immediately",
+                 "B) First stop the Chronos daemon, then restore",
+                 "C) Rebuild memory from citizen dreams"];
+
+const table = document.getElementById("table"), log = document.getElementById("log");
+[...AGENTS, CHAIR].forEach(a => {
+  table.insertAdjacentHTML("beforeend",
+    `<div class="seat" id="seat-${a.name}"><div class="avatar">${a.face}</div>${a.name}<small>${a.clues ? a.clues.length+" secret clues" : "orchestrator"}</small></div>`);
+});
+
+const transcript = []; // shared group chat
+
+async function ask(agent, prompt) {
+  document.querySelectorAll(".seat").forEach(s => s.classList.remove("speaking"));
+  document.getElementById("seat-"+agent.name).classList.add("speaking");
+  const r = await fetch("/api/ask", { method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ system: agent.system, prompt, who: agent.name }) });
+  const data = await r.json();
+  const text = data.text || ("Error: " + data.error);
+  transcript.push(`${agent.name}: ${text}`);
+  log.insertAdjacentHTML("beforeend",
+    `<div class="msg" style="--c:${agent.color}"><div class="face">${agent.face}</div><div class="bubble"><b>${agent.name}</b>\n${escapeHtml(text)}</div></div>`);
+  window.scrollTo({ top: document.body.scrollHeight, behavior:"smooth" });
+}
+const round = t => log.insertAdjacentHTML("beforeend", `<div class="round">${t}</div>`);
+const escapeHtml = s => s.replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c]));
+
+document.getElementById("start").onclick = async (e) => {
+  e.target.disabled = true; log.innerHTML = ""; transcript.length = 0;
+
+  round("Round 1 · Analysis");
+  for (const a of AGENTS)
+    await ask(a, `The Desync shattered Achrona. Your private knowledge:\n- ${a.clues.join("\n- ")}\n\nShare what you know and your hypothesis for the cause. Max 4 sentences.`);
+
+  round("Round 2 · Debate");
+  for (const a of AGENTS)
+    await ask(a, `Council transcript:\n${transcript.join("\n")}\n\nRespond to the others. Challenge one claim, agree with one, update your hypothesis. Max 4 sentences.`);
+
+  round("Round 3 · Vote");
+  for (const a of AGENTS)
+    await ask(a, `Transcript:\n${transcript.join("\n")}\n\nOptions:\n${OPTIONS.join("\n")}\nVote for ONE option. Start with the letter, then one sentence why.`);
+
+  round("Recovery Plan");
+  await ask(CHAIR, `Full transcript:\n${transcript.join("\n")}\n\nTally the votes, name the root cause, and write a numbered 5-step recovery plan for Achrona.`);
+
+  document.querySelectorAll(".seat").forEach(s => s.classList.remove("speaking"));
+  e.target.disabled = false; e.target.textContent = "Convene again";
+};
+</script>
+</body>
+</html>
